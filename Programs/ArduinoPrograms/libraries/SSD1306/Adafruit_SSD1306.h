@@ -1,30 +1,24 @@
+/*
+*This has been modified by William Brines November 10, 2018
+*The modifiecation to this file removing unessusery functions 
+*due to the use of SPI comuniction.
+*/
+
 /**************************************************************************
- This is a library for our Monochrome OLEDs based on SSD1306 drivers
+ This is a library for our Monochrome OLEDs 128x32 based on SSD1306 drivers
 
- Pick one up today in the adafruit shop!
- ------> http://www.adafruit.com/category/63_98
-
- These displays use I2C or SPI to communicate, 2 to 5 pins are required to
+ These displays use I2C communicate, 2 to 5 pins are required to
  interface.
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing products
- from Adafruit!
 
  Written by Limor Fried/Ladyada for Adafruit Industries, with contributions
  from the open source community.
  BSD license, check license.txt for more information
- All text above, and the splash screen below must be included in any
- redistribution.
  **************************************************************************/
 
 #ifndef _Adafruit_SSD1306_H_
 #define _Adafruit_SSD1306_H_
 
-// ONE of the following three lines must be #defined:
-//#define SSD1306_128_64
 #define SSD1306_128_32
-//#define SSD1306_96_16
 // This establishes the screen dimensions in old Adafruit_SSD1306 sketches
 // (NEW CODE SHOULD IGNORE THIS, USE THE CONSTRUCTORS THAT ACCEPT WIDTH
 // AND HEIGHT ARGUMENTS).
@@ -88,18 +82,11 @@
 #define SSD1306_SET_VERTICAL_SCROLL_AREA             0xA3
 
 // Deprecated size stuff for backwards compatibility with old sketches
-#if defined SSD1306_128_64
- #define SSD1306_LCDWIDTH  128
- #define SSD1306_LCDHEIGHT  64
-#endif
 #if defined SSD1306_128_32
  #define SSD1306_LCDWIDTH  128
  #define SSD1306_LCDHEIGHT  32
 #endif
-#if defined SSD1306_96_16
- #define SSD1306_LCDWIDTH   96
- #define SSD1306_LCDHEIGHT  16
-#endif
+
 
 class Adafruit_SSD1306 : public Adafruit_GFX {
  public:
@@ -140,7 +127,6 @@ class Adafruit_SSD1306 : public Adafruit_GFX {
   uint8_t     *getBuffer(void);
 
  private:
-  inline void  SPIwrite(uint8_t d) __attribute__((always_inline));
   void         drawFastHLineInternal(int16_t x, int16_t y, int16_t w,
                  uint16_t color);
   void         drawFastVLineInternal(int16_t x, int16_t y, int16_t h,

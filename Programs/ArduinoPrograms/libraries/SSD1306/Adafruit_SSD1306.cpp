@@ -1,21 +1,18 @@
+/*
+*This has been modified by William Brines November 10, 2018
+*The modifiecation to this file removing unessusery functions 
+*due to the use of SPI comuniction.
+*/
+
 /**************************************************************************
- This is a library for our Monochrome OLEDs based on SSD1306 drivers
+ This is a library for our Monochrome OLEDs 128x32 based on SSD1306 drivers
 
- Pick one up today in the adafruit shop!
- ------> http://www.adafruit.com/category/63_98
-
- These displays use I2C or SPI to communicate, 2 to 5 pins are required to
+ These displays use I2C communicate, 2 to 5 pins are required to
  interface.
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing products
- from Adafruit!
 
  Written by Limor Fried/Ladyada for Adafruit Industries, with contributions
  from the open source community.
  BSD license, check license.txt for more information
- All text above, and the splash screen below must be included in any
- redistribution.
  **************************************************************************/
 
 #ifdef __AVR__
@@ -32,7 +29,6 @@
 
 #include <Adafruit_GFX.h>
 #include "Adafruit_SSD1306.h"
-#include "splash.h"
 
 // SOME DEFINES AND STATIC VARIABLES USED INTERNALLY -----------------------
 
@@ -105,52 +101,6 @@ Adafruit_SSD1306::Adafruit_SSD1306(uint8_t w, uint8_t h, TwoWire *twi,
 #endif
 }
 
-// New constructor for 'soft' SPI
-Adafruit_SSD1306::Adafruit_SSD1306(uint8_t w, uint8_t h,
-  int8_t mosi_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin,
-  int8_t cs_pin) : Adafruit_GFX(w, h), mosiPin(mosi_pin), clkPin(sclk_pin),
-  dcPin(dc_pin), rstPin(rst_pin), csPin(cs_pin), wire(NULL), buffer(NULL) {
-#if !defined(ARDUINO_STM32_FEATHER)
-  spi = NULL;
-#endif
-}
-
-// New constructor for hardware SPI
-#if !defined(ARDUINO_STM32_FEATHER) // No HW SPI on WICED Feather yet
-Adafruit_SSD1306::Adafruit_SSD1306(uint8_t w, uint8_t h, SPIClass *spi,
-  int8_t dc_pin, int8_t rst_pin, int8_t cs_pin, uint32_t bitrate) :
-  Adafruit_GFX(w, h), spi(spi ? spi : &SPI), wire(NULL),
-  mosiPin(-1), clkPin(-1), dcPin(dc_pin), rstPin(rst_pin), csPin(cs_pin),
-  buffer(NULL) {
-#ifdef SPI_HAS_TRANSACTION
-  spiSettings = SPISettings(bitrate, MSBFIRST, SPI_MODE0);
-#endif
-}
-#endif
-
-// Old constructor for 'soft' SPI (deprecated)
-Adafruit_SSD1306::Adafruit_SSD1306(int8_t mosi_pin, int8_t sclk_pin,
-  int8_t dc_pin, int8_t rst_pin, int8_t cs_pin) :
-  Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT),
-  mosiPin(mosi_pin), clkPin(sclk_pin), dcPin(dc_pin), rstPin(rst_pin),
-  csPin(cs_pin), wire(NULL), buffer(NULL) {
-#if !defined(ARDUINO_STM32_FEATHER)
-  spi = NULL;
-#endif
-}
-
-// Old constructor for hardware SPI (deprecated)
-#if !defined(ARDUINO_STM32_FEATHER) // No HW SPI on WICED Feather yet
-Adafruit_SSD1306::Adafruit_SSD1306(int8_t dc_pin, int8_t rst_pin,
-  int8_t cs_pin) : Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT),
-  mosiPin(-1), clkPin(-1), dcPin(dc_pin), rstPin(rst_pin), csPin(cs_pin),
-  spi(&SPI), wire(NULL), buffer(NULL) {
-#ifdef SPI_HAS_TRANSACTION
-  spiSettings = SPISettings(8000000, MSBFIRST, SPI_MODE0);
-#endif
-}
-#endif
-
 // Old constructor for I2C (deprecated)
 Adafruit_SSD1306::Adafruit_SSD1306(int8_t rst_pin) :
   Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT),
@@ -170,31 +120,6 @@ Adafruit_SSD1306::~Adafruit_SSD1306(void) {
 
 // LOW-LEVEL UTILS ---------------------------------------------------------
 
-// Issue single byte out SPI, either soft or hardware as appropriate.
-// SPI transaction/selection must be performed in calling function.
-inline void Adafruit_SSD1306::SPIwrite(uint8_t d) {
-#if !defined(ARDUINO_STM32_FEATHER)
-  if(spi) {
-    (void)spi->transfer(d);
-  } else {
-#endif
-    for(uint8_t bit = 0x80; bit; bit >>= 1) {
-#ifdef HAVE_PORTREG
-      if(d & bit) *mosiPort |=  mosiPinMask;
-      else        *mosiPort &= ~mosiPinMask;
-      *clkPort |=  clkPinMask; // Clock high
-      *clkPort &= ~clkPinMask; // Clock low
-#else
-      digitalWrite(mosiPin, d & bit);
-      digitalWrite(clkPin , HIGH);
-      digitalWrite(clkPin , LOW);
-#endif
-    }
-#if !defined(ARDUINO_STM32_FEATHER)
-  }
-#endif
-}
-
 // Issue single command to SSD1306, using I2C or hard/soft SPI as needed.
 // Because command calls are often grouped, SPI transaction and selection
 // must be started/ended in calling function for efficiency.
@@ -205,10 +130,7 @@ void Adafruit_SSD1306::ssd1306_command1(uint8_t c) {
     WIRE_WRITE((uint8_t)0x00); // Co = 0, D/C = 0
     WIRE_WRITE(c);
     wire->endTransmission();
-  } else { // SPI (hw or soft) -- transaction started in calling function
-    SSD1306_MODE_COMMAND
-    SPIwrite(c);
-  }
+  } 
 }
 
 // Issue list of commands to SSD1306, same rules as above re: transactions.
@@ -229,10 +151,7 @@ void Adafruit_SSD1306::ssd1306_commandList(const uint8_t *c, uint8_t n) {
       bytesOut++;
     }
     wire->endTransmission();
-  } else { // SPI -- transaction started in calling function
-    SSD1306_MODE_COMMAND
-    while(n--) SPIwrite(pgm_read_byte(c++));
-  }
+  } 
 }
 
 // A public version of ssd1306_command1(), for existing user code that
@@ -252,14 +171,7 @@ boolean Adafruit_SSD1306::begin(uint8_t vcs, uint8_t addr, boolean reset) {
     return false;
 
   clearDisplay();
-  if(HEIGHT > 32) {
-    drawBitmap((WIDTH - splash1_width) / 2, (HEIGHT - splash1_height) / 2,
-      splash1_data, splash1_width, splash1_height, 1);
-  } else {
-    drawBitmap((WIDTH - splash2_width) / 2, (HEIGHT - splash2_height) / 2,
-      splash2_data, splash2_width, splash2_height, 1);
-  }
-
+  
   vccstate = vcs;
 
   // Setup pin directions
@@ -637,9 +549,6 @@ void Adafruit_SSD1306::display(void) {
       bytesOut++;
     }
     wire->endTransmission();
-  } else { // SPI
-    SSD1306_MODE_DATA
-    while(count--) SPIwrite(*ptr++);
   }
   TRANSACTION_END
 }
