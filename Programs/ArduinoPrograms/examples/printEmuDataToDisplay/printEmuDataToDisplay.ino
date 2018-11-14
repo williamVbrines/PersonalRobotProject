@@ -1,8 +1,9 @@
 /**************************************************************************
  * This folowing program is a test of the 128 by 32 OLED Display
- * Using the Adafruit_GFX.h , Adafruit_SSD1306.h.
+ * Using the Adafruit_GFX.h , Adafruit_SSD1306.h. And a test of the
+ * MPU6050 3 Axise gyro sensor.
  * By William Brines
- * November 10, 2018
+ * November 11, 2018
  */
 
 #include <Wire.h>
@@ -23,21 +24,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define LOGO_HEIGHT 16
 #define LOGO_WIDTH 14
-static const unsigned char PROGMEM logo_bmp[] =
-{ B00000001, B10000000,
-  B00000001, B10000000,
-  B00000101, B10100000,
-  B00011101, B10110000,
-  B00110001, B10011000,
-  B00110001, B10011000,
-  B01100001, B10001100,
-  B01100001, B10001100,
-  B01100000, B00001100,
-  B00110000, B00001100,
-  B00110000, B00011000,
-  B00011000, B00011000,
-  B00001110, B01110000,
-  B00000111, B11100000 };
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -53,16 +39,7 @@ MPU6050 mpu;
    digital I/O pin 2.
  * ========================================================================= */
 
-// uncomment "OUTPUT_READABLE_YAWPITCHROLL" if you want to see the yaw/
-// pitch/roll angles (in degrees) calculated from the quaternions coming
-// from the FIFO. Note this also requires gravity vector calculations.
-// Also note that yaw/pitch/roll angles suffer from gimbal lock (for
-// more info, see: http://en.wikipedia.org/wiki/Gimbal_lock)
-#define OUTPUT_READABLE_YAWPITCHROLL
-
 #define INTERRUPT_PIN 2  // use pin 2 on Arduino Uno & most boards
-#define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
-bool blinkState = false;
 
 // MPU control/status vars
 bool dmpReady = false;  // set true if DMP init was successful
@@ -84,6 +61,8 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
 
+unsigned long lastDisplay; //The last time things have been displayed
+
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
 // ================================================================
@@ -97,107 +76,15 @@ void dmpDataReady() {
 // ===                      INITIAL SETUP                       ===
 // ================================================================
 void setup() {
- // join I2C bus (I2Cdev library doesn't do this automatically)
-  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-      Wire.begin();
-      Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-      Fastwire::setup(400, true);
-  #endif
 
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
-
-  display.clearDisplay();
-  display.setTextSize(1);             // Normal 1:1 pixel scale
-  display.setTextColor(WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
+  lastDisplay = 0;
   
-  // Draw a small bitmap image the on symbol
-  display.clearDisplay();
-  display.drawBitmap(
-    (display.width()  - LOGO_WIDTH ) / 2,
-    (display.height() - LOGO_HEIGHT) / 2,
-    logo_bmp, LOGO_WIDTH, LOGO_HEIGHT, 1);
-  display.display();
-  delay(5000);
-
-  display.clearDisplay();
-  display.println("Initializing I2C devices...");
-  mpu.initialize();
-  pinMode(INTERRUPT_PIN, INPUT);
-  display.display();
-  delay(1000);
+  setupOLED();
+  displayOnSymbol();
+  delay(2000);
   
-  display.clearDisplay();
-  display.setCursor(0,0);           
-  display.println("Testing device connections...");
-  display.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-  display.display();
-  delay(1000);
+  setupMPU6050();
 
-  display.clearDisplay();
-  // load and configure the DMP
-  display.setCursor(0,0);  
-  display.println(F("Initializing DMP..."));
-  devStatus = mpu.dmpInitialize();
-  display.display();
-  delay(1000);
-
-  //[-3913,-3912] --> [-2,16]  [-1231,-1230] --> [-4,14] [1695,1696] --> [16370,16390] [16,17] --> [-2,1]  [14,15] --> [-2,1]  [-19,-18] --> [0,4]
-  // supply your own gyro offsets here, scaled for min sensitivity
-  mpu.setXGyroOffset(16);
-  mpu.setYGyroOffset(14);
-  mpu.setZGyroOffset(16390);
-  mpu.setZAccelOffset(1696); // 1688 factory default for my test chip
-
-   // make sure it worked (returns 0 if so)
-    if (devStatus == 0) {
-        // turn on the DMP, now that it's ready
-        display.clearDisplay();
-        display.setCursor(0,0);  
-        display.println(F("Enabling DMP..."));
-        display.display();
-        delay(1000);
-        mpu.setDMPEnabled(true);
-
-        // enable Arduino interrupt detection
-        display.clearDisplay();
-        display.setCursor(0,0);  
-        display.print(F("Enabling interrupt detection (Arduino external interrupt "));
-        display.print(digitalPinToInterrupt(INTERRUPT_PIN));
-        display.println(F(")..."));
-        display.display();
-        delay(1000);
-        
-        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
-        
-        mpuIntStatus = mpu.getIntStatus();
-
-        // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        display.clearDisplay();
-        display.setCursor(0,0); 
-        display.println(F("DMP ready! Waiting for first interrupt..."));
-        display.display();
-        delay(1000);
-        
-        dmpReady = true;
-
-        // get expected DMP packet size for later comparison
-        packetSize = mpu.dmpGetFIFOPacketSize();
-    } else {
-        // ERROR!
-        // 1 = initial memory load failed
-        // 2 = DMP configuration updates failed
-        // (if it's going to break, usually the code will be 1)
-        display.clearDisplay();
-        display.setCursor(0,0); 
-        display.print(F("DMP Initialization failed (code "));
-        display.print(devStatus);
-        display.println(F(")"));
-        display.display();
-        delay(1000);
-    }
 }
 
 
@@ -207,7 +94,7 @@ void setup() {
 
 void loop(){
    
-// if programming failed, don't try to do anything
+    // if programming failed, don't try to do anything
     if (!dmpReady) return;
 
     // wait for MPU interrupt or extra packet(s) available
@@ -241,8 +128,9 @@ void loop(){
         // reset so we can continue cleanly
         mpu.resetFIFO();
         fifoCount = mpu.getFIFOCount();
-       // display.println(F("FIFO overflow!"));
-       // display.display();
+        //display.clearDisplay();
+        //display.println(F("FIFO overflow!"));
+        //display.display();
         
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & _BV(MPU6050_INTERRUPT_DMP_INT_BIT)) {
@@ -261,17 +149,167 @@ void loop(){
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-        display.clearDisplay();
-        display.setCursor(0,0);             // Start at top-left corner
-        display.print("YAW\t");
-        display.println(ypr[0] * 180/M_PI);
-        display.print("PITCH\t");
-        display.println(ypr[1] * 180/M_PI);
-        display.print("ROLL\t");
-        display.println(ypr[2] * 180/M_PI);
-        display.display();
-        delay(333);
+        if(lastDisplay + 333 < millis())
+        {
+          
+          display.clearDisplay();
+          display.setCursor(0,0);             // Start at top-left corner
+          display.print("YAW\t");
+          display.println(ypr[0] * 180/M_PI);
+          display.print("PITCH\t");
+          display.println(ypr[1] * 180/M_PI);
+          display.print("ROLL\t");
+          display.println(ypr[2] * 180/M_PI);
+          display.print("D");
+          display.print(millis() - lastDisplay);//print delta / change in time
+          display.print(" T");
+          display.println(millis());
+          
+          display.display();
+          
+          lastDisplay = millis();
+        }
+
+        if(millis() >= 0xFFF0FFFF)
+        {
+          display.clearDisplay();
+          display.setCursor(0,0);             // Start at top-left corner
+          display.print("Resting Time Pleasw wait...");
+
+          while(millis() < 0x000FFFFF){}
+          
+          lastDisplay = millis();
+          
+        }
       
     }
 }
+
+void setupOLED()
+{
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
+
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(WHITE);        // Draw white text
+}
+
+void displayOnSymbol()
+{
+
+  static const unsigned char PROGMEM logo_bmp[] =
+  { B00000001, B10000000,
+    B00000001, B10000000,
+    B00000101, B10100000,
+    B00011101, B10110000,
+    B00110001, B10011000,
+    B00110001, B10011000,
+    B01100001, B10001100,
+    B01100001, B10001100,
+    B01100000, B00001100,
+    B00110000, B00001100,
+    B00110000, B00011000,
+    B00011000, B00011000,
+    B00001110, B01110000,
+    B00000111, B11100000 };
+    
+    // Draw a small bitmap image the on symbol
+  display.clearDisplay();
+  display.drawBitmap(
+    (display.width()  - LOGO_WIDTH ) / 2,
+    (display.height() - LOGO_HEIGHT) / 2,
+    logo_bmp, LOGO_WIDTH, LOGO_HEIGHT, 1);
+  display.display();
+}
+
+void setupMPU6050()
+{
+ // join I2C bus (I2Cdev library doesn't do this automatically)
+  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+      Wire.begin();
+      Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+      Fastwire::setup(400, true);
+  #endif
+  
+  display.clearDisplay();
+  display.setCursor(0,0);  
+  display.println("Initializing I2C devices...");
+  mpu.initialize();
+  pinMode(INTERRUPT_PIN, INPUT);
+  display.display();
+  delay(1000);
+  
+  display.clearDisplay();
+  display.setCursor(0,0);           
+  display.println("Testing device connections...");
+  display.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+  display.display();
+  delay(1000);
+
+  display.clearDisplay();
+  // load and configure the DMP
+  display.setCursor(0,0);  
+  display.println(F("Initializing DMP..."));
+  devStatus = mpu.dmpInitialize();
+  display.display();
+  delay(1000);
+
+  mpu.setXGyroOffset(16);
+  mpu.setYGyroOffset(14);
+  mpu.setZGyroOffset(16390);
+  mpu.setZAccelOffset(1696); 
+  
+  // make sure it worked (returns 0 if so)
+  if (devStatus == 0) 
+  {
+      // turn on the DMP, now that it's ready
+      display.clearDisplay();
+      display.setCursor(0,0);  
+      display.println(F("Enabling DMP..."));
+      display.display();
+      delay(1000);
+      mpu.setDMPEnabled(true);
+
+      // enable Arduino interrupt detection
+      display.clearDisplay();
+      display.setCursor(0,0);  
+      display.print(F("Enabling interrupt detection (Arduino external interrupt "));
+      display.print(digitalPinToInterrupt(INTERRUPT_PIN));
+      display.println(F(")..."));
+      display.display();
+      delay(1000);
+      
+      attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+      
+      mpuIntStatus = mpu.getIntStatus();
+
+      // set our DMP Ready flag so the main loop() function knows it's okay to use it
+      display.clearDisplay();
+      display.setCursor(0,0); 
+      display.println(F("DMP ready! Waiting for first interrupt..."));
+      display.display();
+      delay(1000);
+      
+      dmpReady = true;
+
+      // get expected DMP packet size for later comparison
+      packetSize = mpu.dmpGetFIFOPacketSize();
+  } else {
+      // ERROR!
+      // 1 = initial memory load failed
+      // 2 = DMP configuration updates failed
+      // (if it's going to break, usually the code will be 1)
+      display.clearDisplay();
+      display.setCursor(0,0); 
+      display.print(F("DMP Initialization failed (code "));
+      display.print(devStatus);
+      display.println(F(")"));
+      display.display();
+      delay(1000);
+  }
+
+}
+
 
